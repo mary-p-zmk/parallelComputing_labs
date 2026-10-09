@@ -1,1 +1,230 @@
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <list>
+#include <string>
+#include <chrono>
+#include <algorithm>
 
+using namespace std;
+
+void Thread1() { cout << "1\n"; }
+void Thread2() { cout << "2\n"; }
+
+void Task_1_2_1() {
+    cout << "task 1_2_1\n";
+    thread t1(Thread1);
+    thread t2(Thread2); 
+}
+
+void Task_1_2_2() {
+    cout << "task 1_2_2\n";
+    thread t1(Thread1);
+    thread t2(Thread2); 
+
+    t1.detach();
+    t2.detach();
+}
+
+list <int> l1;
+mutex m1;
+
+// Task 1.2.3
+void AddToList_1_2_3(int start_val) {
+    l1.push_back(start_val);
+    cout << "Added:" << start_val << "\n";
+    for (int i = 1; i < 9; ++i){
+        l1.push_back(start_val + i);
+        cout << "Added:" << start_val + i << "\n";
+    }
+}
+
+void ListContains_1_2_3(int val) {
+    for (int i = 0; i < 10; i++){
+        bool found = (find(l1.begin(), l1.end(), val) != l1.end());
+        cout << "Attempt" << i + 1 << ": " << val << (found ? " (in)\n" : " (not in)\n");
+    }
+}
+
+void Task_1_2_3() {
+    cout << "task 1_2_3\n";
+    l1.clear();
+    thread t1(AddToList_1_2_3, 10);
+    thread t2(ListContains_1_2_3, 10);
+    t1.join();
+    t2.join();
+}
+
+void AddToList_1_2_4(int start_val) {
+    m1.lock();
+    l1.push_back(start_val);
+    cout << "Added: " << start_val << "\n";
+    for (int i = 1; i < 9; ++i) {
+        l1.push_back(start_val + i);
+        cout << "Added: " << start_val + i << "\n";
+    }
+    m1.unlock();
+}
+
+void ListContains_1_2_4(int val) {
+    for (int i = 0; i < 10; ++i) {
+        m1.lock();
+        bool found = (find(l1.begin(), l1.end(), val) != l1.end());
+        m1.unlock();
+        cout << "Attempt" << i + 1 << ": " << val << (found ? " (in)\n" : " (not in)\n");
+    }
+}
+
+void Task_1_2_4() {
+    cout << "task 1_2_4\n";
+    l1.clear();
+    thread t1(AddToList_1_2_4, 10);
+    thread t2(ListContains_1_2_4, 10);
+    t1.join();
+    t2.join();
+}
+
+list<int> l2;
+mutex m2;
+
+void AddToList_1_2_5(int start_val) {
+    lock_guard<mutex> guard(m2);
+    l2.push_back(start_val);
+    cout << "Added :" << start_val << "\n";
+}
+
+void ListContains_1_2_5(int val) {
+    lock_guard<mutex> guard(m2);
+    bool found = (find(l2.begin(), l2.end(), val) != l2.end());
+    cout << "Check :" << val << (found ? " (in)\n" : " (not in)\n");
+}
+
+void Task_1_2_5() {
+    cout << "task 1_2_5\n";
+    l2.clear();
+    int base_val = 100;
+
+    for (int i = 0; i < 10; ++i) {
+        thread t1(AddToList_1_2_5, base_val + 1);
+        t1.detach();
+
+        thread t2(ListContains_1_2_5, base_val);
+        t2.detach();
+    }
+    this_thread::sleep_for(chrono::milliseconds(500));
+}
+
+class someData {
+public:
+    string name = "Empty";
+    string surname = "Empty";
+    string address = "Empty";
+    int age = 0;
+};
+
+class exchangePerson {
+    public:
+    someData data;
+    mutex m;
+
+    static void AlexanderMelnuk(exchangePerson& p) {
+        lock_guard<mutex> guard(p.m);
+        p.data.name = "Alexander";
+        p.data.surname = "Melnuk";
+        p.data.address = "Kyiv";
+        p.data.age = 30;
+    }
+
+    static void OlhaShevchenco(exchangePerson& p) {
+        lock_guard<mutex> guard(p.m);
+        p.data.name = "Olha";
+        p.data.surname = "Shevchenko";
+        p.data.address = "Lviv";
+        p.data.age = 25;
+    }
+
+    static void Swap_1_2_6(exchangePerson& p1, exchangePerson& p2) {
+        if (&p1 == &p2) return;
+
+        std::lock(p1.m, p2.m);
+        lock_guard<mutex> lock1(p1.m, std::adopt_lock);
+        lock_guard<mutex> lock2(p2.m, std::adopt_lock);
+
+        swap(p1.data, p2.data);
+    }
+
+    static void Swap_1_2_7(exchangePerson& p1, exchangePerson& p2) {
+        if (&p1 == &p2) return;
+
+        unique_lock<mutex> lock1(p1.m, std::defer_lock);
+        unique_lock<mutex> lock2(p2.m, std::defer_lock);
+        std::lock(lock1, lock2);
+
+        swap(p1.data, p2.data);
+    }
+    static void PrintData(const exchangePerson& p) {
+        cout << "[" << p.data.name << ", " << p.data.surname << ", "
+             << p.data.address << ", Age: " << p.data.age << "]\n";
+    }
+};
+
+void Task_1_2_6() {
+    cout << "\n--- Task 1.2.6 (std::lock & std::adopt_lock) ---\n";
+    exchangePerson p1, p2;
+
+    thread t1(&exchangePerson::AlexanderMelnuk, ref(p1));
+    t1.detach();
+    thread t2(&exchangePerson::OlhaShevchenco, ref(p2));
+    t2.detach();
+
+    this_thread::sleep_for(chrono::milliseconds(50));
+
+    cout << "Before Swap:\n";
+    exchangePerson::PrintData(p1);
+    exchangePerson::PrintData(p2);
+
+    thread t_swap(exchangePerson::Swap_1_2_6, ref(p1), ref(p2));
+    t_swap.join();
+
+    cout << "After Swap:\n";
+    exchangePerson::PrintData(p1);
+    exchangePerson::PrintData(p2);
+}
+
+void Task_1_2_7() {
+    cout << "\n--- Task 1.2.7 (std::unique_lock & std::defer_lock) ---\n";
+    exchangePerson p1, p2;
+
+    thread t1(&exchangePerson::AlexanderMelnuk, ref(p1));
+    t1.detach();
+    thread t2(&exchangePerson::OlhaShevchenco, ref(p2));
+    t2.detach();
+
+    this_thread::sleep_for(chrono::milliseconds(50));
+
+    cout << "Before Swap:\n";
+    exchangePerson::PrintData(p1);
+    exchangePerson::PrintData(p2);
+
+    thread t_swap(exchangePerson::Swap_1_2_7, ref(p1), ref(p2));
+    t_swap.join();
+
+    cout << "After Swap:\n";
+    exchangePerson::PrintData(p1);
+    exchangePerson::PrintData(p2);
+}
+
+int main(){
+   //Task_1_2_1();
+   //Task_1_2_2();
+
+   //Task_1_2_3();
+   //Task_1_2_4();
+
+   //Task_1_2_5();
+
+   //Task_1_2_6();
+   //Task_1_2_7();
+
+   return 0;
+}
